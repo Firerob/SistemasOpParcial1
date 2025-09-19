@@ -5,6 +5,8 @@
 #include <algorithm>
 using namespace std;
 
+// Configura los esquemas de planificación según lo definido:
+// Cada esquema determina qué algoritmo se usa en cada cola y el quantum correspondiente
 void MLFQ::configureScheme(int scheme) {
     if (scheme == 1) {
         qAlgo[1] = RR_TYPE; qQuantum[1] = 1;
@@ -24,13 +26,19 @@ void MLFQ::configureScheme(int scheme) {
     }
 }
 
+// Leer datos de entrada desde stdin (se espera formato PID;BT;AT;...)
+// Cada proceso se guarda con un orden de llegada (order)
 void MLFQ::readData() {
     string line; int order = 0;
     while (getline(cin, line)) {
-        if (line.empty() || line[0] == '#') continue;
-        vector<string> tokens; string token; stringstream ss(line);
+        if (line.empty() || line[0] == '#') continue; // ignorar líneas vacías o comentarios
+        vector<string> tokens; 
+        string token; 
+        stringstream ss(line);
+
         while (getline(ss, token, ';')) tokens.push_back(token);
-        if (tokens.size() < 3) continue;
+
+        if (tokens.size() < 3) continue; // aseguramos que tenga al menos PID, BT y AT
         string pid = tokens[0];
         int bt = stoi(tokens[1]);
         int at = stoi(tokens[2]);
@@ -38,25 +46,31 @@ void MLFQ::readData() {
     }
 }
 
+// Ejecutar la planificación MLFQ
 void MLFQ::run() {
     int n = procs.size();
     int time = 0, finishedCount = 0;
 
+    // Mientras no se terminen todos los procesos
     while (finishedCount < n) {
         vector<int> ready[5];
+
+        // Identificar procesos listos en cada cola
         for (int i = 0; i < n; i++) {
             if (!procs[i].finished && procs[i].arrival <= time) {
                 ready[procs[i].queueId].push_back(i);
             }
         }
-
+        // Seleccionar la cola más prioritaria (menor número) con procesos listos
         int qid = 0;
         for (int q = 1; q <= 4; q++) {
             if (!ready[q].empty()) { qid = q; break; }
         }
 
+        // Si no hay procesos listos, avanzar el tiempo
         if (qid == 0) { time++; continue; }
-
+        
+        // Selección de proceso según el algoritmo de la cola
         int idx = -1;
         if (qAlgo[qid] == RR_TYPE) {
             idx = ready[qid][0];
@@ -81,19 +95,24 @@ void MLFQ::run() {
                 }
             }
         }
-
+        // Referencia al proceso seleccionado
         Process &p = procs[idx];
+        
+        // Si es la primera vez que corre, calculamos su RT (Response Time)
         if (!p.started) {
             p.start = time;
             p.rt = time - p.arrival;
             p.started = true;
         }
-
+        
+        // Ejecutamos una unidad de tiempo
         p.remaining--;
         time++;
 
+        // Decrementar quantum si es Round Robin
         if (qAlgo[qid] == RR_TYPE) p.rrQuantumRemaining--;
 
+        // Si el proceso terminó
         if (p.remaining == 0) {
             p.finished = true;
             p.end = time;
@@ -102,6 +121,7 @@ void MLFQ::run() {
             p.wt = p.tat - p.burst;
             finishedCount++;
         } else {
+            // Si se le acabó el quantum en RR, baja de cola
             if (qAlgo[qid] == RR_TYPE && p.rrQuantumRemaining == 0) {
                 if (p.queueId < 4) p.queueId++;
                 p.rrQuantumRemaining = 0;
@@ -115,6 +135,7 @@ void MLFQ::writeResults(string titulo) {
     cout << "PID;BT;AT;Q;WT;CT;RT;TAT\n";
     double sumWT=0,sumCT=0,sumRT=0,sumTAT=0;
     int n = procs.size();
+    
     for (auto &p : procs) {
         cout << p.pid << ";" << p.burst << ";" << p.arrival << ";"
              << p.queueId << ";" << p.wt << ";" << p.ct << ";"
